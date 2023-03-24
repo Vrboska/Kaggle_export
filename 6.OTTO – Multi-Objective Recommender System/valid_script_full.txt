@@ -1,0 +1,465 @@
+select TO_TIMESTAMP(max(ts)/1000 +7200) from valid_radek where session_id is not null;
+
+create or replace table valid_sample_cv as select * from (select distinct session_id from valid_radek) sample(7);----*********************************
+create or replace table valid_sample_events_cv as 
+(select 
+ a.* 
+from valid_radek a ----*********************************
+inner join valid_sample_cv b on a.session_id=b.session_id
+order by a.session_id desc, a.ts asc);             
+
+
+create or replace table top_20_buys_cv as
+select distinct aid_click, aid_order from(
+select 
+a.*,
+ROW_NUMBER() OVER(PARTITION BY a.aid_click ORDER BY order_score desc) AS Row_NUMBER
+ from
+(
+select 
+aid_click,
+aid_order, 
+--(1661724000278-avg(time_click))/(1000*3600*24) as click_days_from_test_avg,
+avg(time_order_from_click)/(1000*3600) as order_hours_from_click_avg,
+count(distinct session_id) as num_sessions_ordered,
+count(*)  as num_occured_overall,
+sum(case 
+//    when order_type='clicks' and time_click<(select min(ts) from valid_radek) and aid_order not in (select distinct aid from valid_radek) then 10
+    when order_type='clicks' and time_click<(select min(ts) from valid_radek) then 1
+    when order_type='clicks' and time_click>=(select min(ts) from valid_radek) then 1
+
+//    when  order_type='carts' and time_click<(select min(ts) from valid_radek) and aid_order not in (select distinct aid from valid_radek) then 30
+    when  order_type='carts' and time_click<(select min(ts) from valid_radek) then 3
+    when  order_type='carts' and time_click>=(select min(ts) from valid_radek) then 3
+
+//    when  order_type='orders' and time_click<(select min(ts) from valid_radek) and aid_order not in (select distinct aid from valid_radek) then 60 
+    when  order_type='orders' and time_click<(select min(ts) from valid_radek) then 6
+    when  order_type='orders' and time_click>=(select min(ts) from valid_radek) then 6
+    
+    else 0 end) as order_score
+from(
+select 
+a.type as click_type,
+b.type as order_type,
+a.aid as aid_click,
+b.aid as aid_order,
+a.session_id,
+a.ts as time_click, --1661724000278-
+abs(b.ts-a.ts) as time_order_from_click
+  
+from ((select * from train where ts<(select min(ts) from valid_radek)) union select * from valid_radek)  a  
+inner join  ((select * from train where ts<(select min(ts) from valid_radek)) union select * from valid_radek)  b on a.session_id=b.session_id and abs(b.ts-a.ts)<1000*3600*12-- and b.type in ('carts','orders') and a.type in ('carts','orders')
+//  and DAYOFWEEK(TO_TIMESTAMP(a.ts/1000 +7200))=DAYOFWEEK(TO_TIMESTAMP(b.ts/1000 +7200))
+//and aid_order in (select distinct aid from(
+//select aid , TO_TIMESTAMP(min(ts)/1000 +7200) as min_, TO_TIMESTAMP(avg(ts)/1000 +7200) as avg_, TO_TIMESTAMP(max(ts)/1000 +7200) as max_, count(*) from train where ts<(select min(ts) from valid_radek) and type in ('carts','orders') group by 1 order by 4 desc) a
+//--inner join (select distinct aid from valid_sample_candidates_cv) b on a.aid=b.aid
+//where max_>='2022-08-18')
+
+where 1=1
+--and a.type='clicks'
+
+)
+group by 1,2) a) where Row_NUMBER<=25;
+
+
+
+
+create or replace table top_20_buy2buy_cv as
+select distinct aid_click, aid_order from(
+select 
+a.*,
+ROW_NUMBER() OVER(PARTITION BY a.aid_click ORDER BY order_score desc) AS Row_NUMBER
+ from
+(
+select 
+aid_click,
+aid_order, 
+--(1661724000278-avg(time_click))/(1000*3600*24) as click_days_from_test_avg,
+avg(time_order_from_click)/(1000*3600) as order_hours_from_click_avg,
+count(distinct session_id) as num_sessions_ordered,
+count(*)  as num_occured_overall,
+sum(case 
+    when order_type='clicks' and time_click<(select min(ts) from valid_radek) then 1 
+    when order_type='clicks' and time_click>=(select min(ts) from valid_radek
+    when  order_type='carts' and time_click<(select min(ts) from valid_radek) then 3 
+    when  order_type='carts' and time_click>=(select min(ts) from valid_radek) then 3
+ 
+    when  order_type='orders' and time_click<(select min(ts) from valid_radek) then 6 
+    when  order_type='orders' and time_click>=(select min(ts) from valid_radek) then 6
+    
+    else 0     
+    end   
+   ) as order_score
+from(
+select 
+a.type as click_type,
+b.type as order_type,
+a.aid as aid_click,
+b.aid as aid_order,
+a.session_id,
+a.ts as time_click, --1661724000278-
+abs(b.ts-a.ts) as time_order_from_click
+  
+from ((select * from train where ts<(select min(ts) from valid_radek)) union select * from valid_radek)  a  
+inner join  ((select * from train where ts<(select min(ts) from valid_radek)) union select * from valid_radek)  b on a.session_id=b.session_id and b.type in ('carts','orders') and a.type in ('carts','orders')
+//  and DAYOFWEEK(TO_TIMESTAMP(a.ts/1000 +7200))=DAYOFWEEK(TO_TIMESTAMP(b.ts/1000 +7200))
+//and aid_order in (select distinct aid from(
+//select aid , TO_TIMESTAMP(min(ts)/1000 +7200) as min_, TO_TIMESTAMP(avg(ts)/1000 +7200) as avg_, TO_TIMESTAMP(max(ts)/1000 +7200) as max_, count(*) from train where ts<(select min(ts) from valid_radek) and type in ('carts','orders') group by 1 order by 4 desc) a
+//--inner join (select distinct aid from valid_sample_candidates_cv) b on a.aid=b.aid
+//where max_>='2022-08-18')
+where 1=1
+--and a.type='clicks'
+
+)
+group by 1,2) a) where Row_NUMBER<=25
+
+
+
+--left join (select aid, count(distinct session_id) as num_sessions from train where type='carts' group by aid) b on a.aid_click=b.aid
+--where aid_click<>aid_order
+;
+
+
+
+
+
+---------------------------------------------------------------------------------
+
+create or replace table valid_sample_candidates_cv  as
+select distinct
+a.session_id::float as session_id,
+a.aid::float as aid
+from
+(
+select distinct
+a.session_id,
+a.aid
+from valid_sample_events_cv a
+
+
+UNION
+  
+select distinct
+a.session_id,
+aid_order as aid
+from valid_sample_events_cv a
+left join top_20_buy2buy_cv b on a.aid=b.aid_click and a.type in ('carts', 'orders') 
+where aid_order is NOT NULL  
+  
+UNION
+  
+select distinct
+a.session_id,
+aid_order as aid
+from valid_sample_events_cv a
+left join top_20_buys_cv c on a.aid=c.aid_click 
+where aid_order is NOT NULL  
+
+UNION
+  
+select distinct
+a.session_id,
+aid_order as aid
+from valid_sample_events_cv a
+left join top_20_click_to_cartorder_last_week_cv d on a.aid=d.aid_click 
+where aid_order is NOT NULL  
+  
+//UNION
+//  
+//select distinct
+//a.session_id,
+//aid_order as aid
+//from valid_sample_events_cv a
+//left join top_20_buys_outside_cv d on a.aid=d.aid_click 
+//where aid_order is NOT NULL 
+
+) a
+
+where aid is not null
+order by session_id desc, aid desc
+;
+
+
+
+create or replace table valid_sample_session_info_cv as
+select 
+a.session_id::float as session_id,
+count(*) as sess_num_events,
+sum(case when type='clicks' then 1 else 0 end) as sess_num_clicks,
+sum(case when type='carts' then 1 else 0 end) as sess_num_carts,
+sum(case when type='orders' then 1 else 0 end) as sess_num_orders,
+
+sum(case when type='clicks' and ((select max(ts) from valid_sample_events_cv where session_id=a.session_id)-a.ts<1000*3600) then 1 else 0 end) as sess_num_clicks_last_hour,
+sum(case when type='carts' and ((select max(ts) from valid_sample_events_cv where session_id=a.session_id)-a.ts<1000*3600) then 1 else 0 end) as sess_num_carts_last_hour,
+sum(case when type='orders' and ((select max(ts) from valid_sample_events_cv where session_id=a.session_id)-a.ts<1000*3600) then 1 else 0 end) as sess_num_orders_last_hour,
+
+(max(ts)-min(ts))/(1000*3600) sess_duration,
+((select min(ts) from test)-max(ts))/(1000*3600*24) as sess_days_till_test,
+
+MINUTE(TO_TIMESTAMP(max(ts)/1000 +7200)) as sess_minute,
+HOUR(TO_TIMESTAMP(max(ts)/1000 +7200)) as sess_hour,
+DAYOFWEEK(TO_TIMESTAMP(max(ts)/1000 +7200)) as sess_dayofweek,
+DAY(TO_TIMESTAMP(max(ts)/1000 +7200)) as sess_dayofmonth
+
+from 
+valid_sample_events_cv a group by 1;
+
+
+
+                                                                                                       
+create or replace table valid_sample_full_cv as
+select 
+(case when d.session_id is not NULL then 1 else 0 end)::float as target,
+(case when d2.session_id is not NULL then 1 else 0 end)::float as target_clicks,
+(case when d3.session_id is not NULL then 1 else 0 end)::float as target_carts,
+(case when d4.session_id is not NULL then 1 else 0 end)::float as target_orders,
+
+a.*,
+(((select max(ts) from valid_radek)-f.FIRST_SEEN_TS)/(1000*3600))::float as FIRST_SEEN,
+(((select max(ts) from valid_radek)-f.LAST_SEEN_TS)/(1000*3600))::float as LAST_SEEN,
+(((select max(ts) from valid_radek)-f.FIRST_BOUGHT_TS)/(1000*3600))::float as FIRST_BOUGHT,
+(((select max(ts) from valid_radek)-f.LAST_BOUGHT_TS)/(1000*3600))::float as LAST_BOUGHT,
+f.bought_overall::float as bought_overall,
+f.seen_overall::float as seen_overall
+from(
+select 
+a.*,
+d.num_times_ordered_overall::float as num_times_ordered_overall,
+b.SESS_NUM_EVENTS::float as SESS_NUM_EVENTS,
+b.SESS_NUM_CLICKS::float as SESS_NUM_CLICKS,
+b.SESS_NUM_CARTS::float as SESS_NUM_CARTS,
+b.SESS_NUM_ORDERS::float as SESS_NUM_ORDERS,
+b.SESS_NUM_CLICKS_LAST_HOUR::float as SESS_NUM_CLICKS_LAST_HOUR,
+b.SESS_NUM_CARTS_LAST_HOUR::float as SESS_NUM_CARTS_LAST_HOUR,
+b.SESS_NUM_ORDERS_LAST_HOUR::float as SESS_NUM_ORDERS_LAST_HOUR,
+b.SESS_DURATION::float as SESS_DURATION,
+b.SESS_DAYS_TILL_TEST::float as SESS_DAYS_TILL_TEST,
+b.SESS_MINUTE::float as SESS_MINUTE,
+b.SESS_HOUR::float as SESS_HOUR,
+b.SESS_DAYOFWEEK::float as SESS_DAYOFWEEK,
+b.SESS_DAYOFMONTH::float as SESS_DAYOFMONTH,
+coalesce(c.number_carts_orders,0)::float as number_carts_orders,
+coalesce(c.number_carts,0)::float as number_carts,                                                                                                
+coalesce(c.number_orders,0)::float as number_orders                                                                                                
+
+from 
+(
+select 
+a.*,
+--min(CLICK_DAYS_FROM_TEST_AVG) as MIN_CLICK_DAYS_FROM_TEST_AVG,
+--max(CLICK_DAYS_FROM_TEST_AVG) as MAX_CLICK_DAYS_FROM_TEST_AVG,
+--avg(CLICK_DAYS_FROM_TEST_AVG) as AVG_CLICK_DAYS_FROM_TEST_AVG,
+  
+coalesce(max(case when b.aid=a.aid then 1 else 0 end),0)::float as in_session,
+coalesce(max(case when b.aid=a.aid and b.type='clicks' then 1 else 0 end),0)::float as in_session_clicked,
+coalesce(max(case when b.aid=a.aid and b.type='carts' then 1 else 0 end),0)::float as in_session_carted,
+coalesce(max(case when b.aid=a.aid and b.type='orders' then 1 else 0 end),0)::float as in_session_ordered,
+  
+  
+coalesce(sum(case when b.aid=a.aid and b.type='clicks' then 1 
+                  when b.aid=a.aid and b.type='carts' then 6 
+                  when b.aid=a.aid and b.type='orders' then 3
+
+             else 0 end),0)::float as in_session_score,
+  
+coalesce(sum(case when b.aid=a.aid and b.type='clicks' then 1*exp(-0.1*(((select max(ts) from valid_sample_events_cv where session_id=a.session_id)-b.ts)/(1000*3600)))
+                  when b.aid=a.aid and b.type='carts' then 6*exp(-0.1*(((select max(ts) from valid_sample_events_cv where session_id=a.session_id)-b.ts)/(1000*3600))) 
+                  when b.aid=a.aid and b.type='orders' then 3*exp(-0.1*(((select max(ts) from valid_sample_events_cv where session_id=a.session_id)-b.ts)/(1000*3600)))
+
+             else 0 end),0)::float as in_session_score_time_weighted,
+
+(count(distinct d.aid_click)+count(distinct e.aid_click))::float as times_in_top20,
+count(distinct f.aid_click)::float as times_in_top20_last_week,
+
+
+coalesce(min(ORDER_HOURS_FROM_CLICK_AVG), 100000)::float as MIN_ORDER_HOURS_FROM_CLICK_AVG,
+//coalesce(max(ORDER_HOURS_FROM_CLICK_AVG), 100000) as MAX_ORDER_HOURS_FROM_CLICK_AVG,
+coalesce(avg(ORDER_HOURS_FROM_CLICK_AVG), 100000)::float as AVG_ORDER_HOURS_FROM_CLICK_AVG,
+
+coalesce(avg(NUM_SESSIONS_ORDERED), -1000)::float as AVG_NUM_SESSIONS_ORDERED,
+coalesce(SUM(NUM_SESSIONS_ORDERED), -1000)::float as SUM_NUM_SESSIONS_ORDERED,
+
+coalesce(avg(num_occured_overall), -1000)::float as AVG_num_occured_overall,
+coalesce(SUM(num_occured_overall), -1000)::float as SUM_num_occured_overall,
+
+
+coalesce(max(case when b.ts=(select max(ts) from valid_sample_events_cv where session_id=b.session_id) 
+then NUM_SESSIONS_ORDERED else 0 end),-1)::float as LAST_NUM_SESSIONS_ORDERED,
+  
+coalesce(sum(case when (select max(ts) from valid_sample_events_cv where session_id=b.session_id)-b.ts<1000*3600
+then NUM_SESSIONS_ORDERED else 0 end),-1)::float as LAST_HOUR_NUM_SESSIONS_ORDERED
+  
+  
+
+
+from valid_sample_candidates_cv a
+left join valid_sample_events_cv b on a.session_id=b.session_id
+left join (select * from(
+select * from click_to_order_matrix_cv --where num_sessions_ordered>2
+UNION
+select * from cart_to_order_matrix_cv
+UNION
+select * from order_to_order_matrix_cv
+UNION
+select * from click_to_cart_matrix_cv
+)) c on b.aid=c.aid_click and a.aid=c.aid_order and b.type=c.type
+left join top_20_buy2buy_cv d on a.aid=d.aid_order and  b.aid=d.aid_click and b.type in ('carts', 'orders') 
+left join top_20_buys_cv e on a.aid=e.aid_order and  b.aid=e.aid_click
+left join top_20_click_to_cartorder_last_week_cv f on a.aid=f.aid_order and  b.aid=f.aid_click
+
+group by 1,2) a
+left join valid_sample_session_info_cv b on a.session_id=b.session_id
+left join (
+  select 
+  a.session_id,
+  count(distinct a.aid) as number_carts_orders,
+  count(DISTINCT case when a.type='carts' then a.aid else NULL end) number_carts, 
+  count(distinct case when a.type='orders' then a.aid else NULL end) number_orders
+  from 
+  (select * from train where ts<(select max(ts) from valid_sample_events_cv)) a 
+  inner join valid_sample_cv b on a.session_id=b.session_id
+  left join valid_sample_events_cv c on a.session_id=c.session_id and a.aid=c.aid and 1000*floor(a.ts/1000.0)=c.ts and a.type=c.type
+  where c.aid is NULL
+  and a.type in ('carts', 'orders')
+  group by 1
+) c  on a.session_id=c.session_id        
+left join (select aid, count(*) as num_times_ordered_overall from (select * from train where ts<(select max(ts) from valid_sample_events_cv) and type in ('carts', 'ordered'))  group by 1) d on a.aid=d.aid
+
+)a
+
+left join 
+(
+select distinct 
+a.session_id,
+a.aid
+from 
+(select a.*
+ from (select * from train where ts<(select max(ts) from valid_sample_events_cv)) a
+ inner join valid_sample_events_cv b on a.session_id=b.session_id and a.ts>(select max(ts) from valid_sample_events_cv where session_id=b.session_id)
+ order by session_id asc, ts desc) a
+where a.type in ('carts', 'orders')
+) d on a.session_id=d.session_id and a.aid=d.aid
+
+left join 
+(
+select distinct 
+a.session_id,
+a.aid
+from 
+(select a.*
+ from (select * from train where ts<(select max(ts) from valid_sample_events_cv)) a
+ inner join valid_sample_events_cv b on a.session_id=b.session_id and a.ts>(select max(ts) from valid_sample_events_cv where session_id=b.session_id)
+ order by session_id asc, ts desc) a
+where a.type in ('clicks')
+) d2 on a.session_id=d2.session_id and a.aid=d2.aid
+
+left join 
+(
+select distinct 
+a.session_id,
+a.aid
+from 
+(select a.*
+ from (select * from train where ts<(select max(ts) from valid_sample_events_cv)) a
+ inner join valid_sample_events_cv b on a.session_id=b.session_id and a.ts>(select max(ts) from valid_sample_events_cv where session_id=b.session_id)
+ order by session_id asc, ts desc) a
+where a.type in ('carts')
+) d3 on a.session_id=d3.session_id and a.aid=d3.aid
+
+left join 
+(
+select distinct 
+a.session_id,
+a.aid
+from 
+(select a.*
+ from (select * from train where ts<(select max(ts) from valid_sample_events_cv)) a
+ inner join valid_sample_events_cv b on a.session_id=b.session_id and a.ts>(select max(ts) from valid_sample_events_cv where session_id=b.session_id)
+ order by session_id asc, ts desc) a
+where a.type in ('orders')
+) d4 on a.session_id=d4.session_id and a.aid=d4.aid
+
+left join
+(
+select 
+aid as aid_, 
+min(ts)::float as first_seen_ts,
+  avg(ts)::float as avg_seen_ts,
+  max(ts)::float as last_seen_ts,
+
+TO_TIMESTAMP(min(ts)/1000 +7200) as first_seen, 
+TO_TIMESTAMP(avg(ts)/1000 +7200) avg_seen, 
+TO_TIMESTAMP(max(ts)/1000 +7200) last_seen, 
+  
+min(case when type in ('carts', 'orders') then ts else nULL end)::float as first_bought_ts,
+  avg(case when type in ('carts', 'orders') then ts else nULL end)::float as avg_bought_ts,
+  max(case when type in ('carts', 'orders') then ts else nULL end)::float as last_bought_ts,
+  
+TO_TIMESTAMP(min(case when type in ('carts', 'orders') then ts else nULL end)/1000 +7200) as first_bought, 
+TO_TIMESTAMP(avg(case when type in ('carts', 'orders') then ts else nULL end)/1000 +7200) avg_bought, 
+TO_TIMESTAMP(max(case when type in ('carts', 'orders') then ts else nULL end)/1000 +7200) last_bought, 
+  
+count(*) as seen_overall,
+count(case when type in ('carts', 'orders') then ts else nULL end ) as bought_overall
+
+from (select * from train where ts<(select min(ts) from valid_radek) union select * from valid_radek)
+group by 1 order by 4 desc
+) f on a.aid=f.aid_
+
+order by a.session_id, a.aid
+;
+
+
+
+select round(SESS_DAYS_TILL_TEST+SESS_DURATION/24), avg(target)*1000, count(*)  from valid_sample_full_cv group by 1;   
+
+select *,TO_TIMESTAMP(ts/1000 +7200)   from train where session_id=11992862;
+select *,TO_TIMESTAMP(ts/1000 +7200)   from valid_sample_events_cv where session_id=11992862;
+
+select * from train where session_id in(
+select distinct session_id from valid_sample_full_cv where round(SESS_DAYS_TILL_TEST+SESS_DURATION/24)=3);
+
+
+select distinct session_id from train;
+
+select max(ts) from train ;
+                                                                                                       
+select 
+sum(target)
+from valid_sample_full_cv
+;
+
+select sum(num_) from(
+select 
+session_id,
+max(number_carts_orders) as num_
+from valid_sample_full_cv group by 1)
+;
+                                                                                                       
+
+
+
+select a.session_id,a.ts, (((select max(ts) from train_sample_events_cv where session_id=a.session_id)-a.ts)/(1000*3600)) from train_sample_events_cv a;
+
+select top 1111 * from train_sample_full_cv;
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+
+
+select * from
+
+valid_sample_candidates_cv a
+
+left join 
+(
+select distinct 
+a.session_id,
+a.aid
+from 
+(select a.*
+ from (select * from train where ts<(select max(ts) from valid_sample_events_cv)) a
+ inner join valid_sample_events_cv b on a.session_id=b.session_id and a.ts>(select max(ts) from valid_sample_events_cv where session_id=b.session_id)
+ order by session_id asc, ts desc) a
+where a.type in ('carts', 'orders')
+) d on a.session_id=d.session_id and a.aid=d.aid
+where d.aid is not null;
